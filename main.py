@@ -1,16 +1,43 @@
+#
+# aeroBot
+#
+# This is the main file for the AIAA @ UIC Discord bot
+# Features:
+# Poll Command, Role Reactions Managemanet, various silly features, dice roller
+#
+# Coming Soon?:
+# Starboard, remind command (multiple users???)
+#
+# Philip Korus 7/26/2021
+# UIC EE 2022
+#
 import discord
 import time 
 import threading
 import os
-from discord_slash import SlashCommand
+import asyncio
+import random
+
+from discord import message
+
+# pre-release version that will be shown to the board
+versionNum = 0.9
 
 intents=intents=discord.Intents.all()
 client = discord.Client(intents=intents)
-slash = SlashCommand(client, sync_commands=True)
 
+# a global variable used to add reactions to the rolle message
 globalRoleMsg = None
 
-# have to update the blow items with server speicif ID's / variables / emojis
+DEBUG = True
+
+# the persons discord ID that DM's sent to the bot will be routed to
+botOverLordID = 233611399169966081 
+
+# I dont thing we need
+#newMemberRoleID = 841828431956279296
+
+# have to update the blow items with server speific ID's / variables / emojis
 roleInfo = [
   {
     'name': 'New Member',
@@ -45,62 +72,24 @@ roleInfo = [
 ]
 guildID = 836392576084738050
 
-@slash.slash(name="test", description="This is just a test command, nothing more.")
+#@slash.slash(name="test", description="This is just a test command, nothing more.")
 
+# events that occur when the bot first starts up
 @client.event
 async def on_ready():
-    global globalRoleMsg
-    global roleInfo
-    global guildID
-    print('We have logged in as {0.user}'.format(client))
-    game = discord.Game("with GLaDOS")
-    await client.change_presence(status=discord.Status.online, activity=game)
-    #we have restarted the bot so we want to reset the reaction roles message
-    AIAAGuild = client.get_guild(guildID)
-    #newPersonRole = AIAAGuild.get_role(841828431956279296)
-    for x in range (len(roleInfo)):
-      roleInfo[x]['roleAccess'] = AIAAGuild.get_role(roleInfo[x]['ID'])
+  await bootSequence()
 
-    # make code more general instead of channel id
-    rolesChannel = AIAAGuild.get_channel(836398238579032084)
-    await rolesChannel.purge()
-    globalRoleMsg = await rolesChannel.send("**__Welcome to the AIAA Server__** \n"
-    + "To get roles add the reaction below with the corresponding AIAA branch you would want to join. \n"
-    + "You can pick, one, all or undecided if you just wanna take a look around the server! \n"
-    +"If you need a role removed DM one of the board members. \n \n"
-    + "**__AIAA Roles__**\n"
-    + ":airplane: Design Build Fly (DBF)\n"
-    +":rocket: Rocketry \n"
-    +":dash: Quadcopters \n"
-    +":question: Undecided \n\n"
-    +"**__Major__**\n"
-    +":gear: Mechancial Engineering \n"
-    +":keyboard: Computer Science \n"
-    +":bulb: Electrical Engineering \n"
-    +":alembic: Chemcial Engineering \n"
-    +":astronaut: Other \n \n"
-    +"**__Offtopic Roles__**\n"
-    +":books: School\n"
-    +":video_game: Gaming")
-
-    for x in range(1,len(roleInfo)):
-      await globalRoleMsg.add_reaction(emoji=roleInfo[x]['emoji'])
-
+# reaction based events
 @client.event
 async def on_reaction_add(reaction, user):
-  global roleInfo
+  global golbalRoleMsg
 
   if(globalRoleMsg!=None):
     if(reaction.message.id == globalRoleMsg.id):
-      if(user!=client.user):
-        if((next((item for item in roleInfo if item['emoji'] == reaction.emoji), None))!=None):
-          if roleInfo[0]['roleAccess'] in user.roles:
-            await user.remove_roles(roleInfo[0]['roleAccess'])
-          
-          pos = next(i for i, item in enumerate(roleInfo) if item['emoji'] == reaction.emoji)
-          await user.add_roles(roleInfo[pos]['roleAccess'])
+      await userAddRoles(reaction, user)
 
-  # gold star feature only works on messages sent while the bot was on
+  # gold star feature only works on messages sent while the bot was on, no access to the bots previous message
+  # alpha feature
   if(reaction.emoji=="⭐"):
     messageReactionListTemp = reaction.message.reactions
     sumTemp = 0
@@ -116,63 +105,289 @@ async def on_reaction_add(reaction, user):
       +"> "+reaction.message.content+"\n \n"
       +reaction.message.jump_url)
 
-
-        
-
-
+# message based events
 @client.event
 async def on_message(message):
-
     if message.author == client.user:
         return
+    elif isinstance(message.channel, discord.DMChannel):
+      await botRecieveDM(message)
     else:
-      if(message.content.startswith('//poll')):
-        cutMsg = message.content[7:]
-        pollReturn = pollCommandProcess(cutMsg)
-        botPollMsg = await message.channel.send(pollReturn[1])
-        if(pollReturn[0]):
-          reactionsToAdd = pollReturn[2]
-          for x in range(len(reactionsToAdd)):
-            await botPollMsg.add_reaction(emoji=reactionsToAdd[x])
-          await message.delete()
-      elif(message.content.startswith('//remind')):
-        timeActive = "19:33:24"
-        timeActiveHrs = int(timeActive[0:2])
-        timeActiveMin = int(timeActive[3:5])
-        timeActiveSec = int(timeActive[6:8])
+      if(message.content.startswith('!poll')):
+        await pollCommand(message)
 
-        timeRemind = "19:34:24"
-        timeRemindHrs = int(timeRemind[0:2])
-        timeRemindMin = int(timeRemind[3:5])
-        timeRemindSec = int(timeRemind[6:8])
+      elif(message.content.startswith('!roll')):
+        await rollCommand(message)
 
-        timeWait = (timeRemindHrs-timeActiveHrs)*3600 + (timeRemindMin-timeActiveMin)*60 + (timeRemindSec-timeActiveSec) 
-        #await reminderFunc(message,timeWait)
-        thread = threading.Thread(target = await reminderFunc, args = (message,timeWait,))
-        thread.start()
-        #remindMessageData = message.content[9:]
-        #tempAt = ""
-        #print(remindMessageData)
-        #for guild in client.guilds:
-        #  for member in guild.members:
-            # check for @ roles too
-            # when you @ someone it gives you their ID's no need to actually do this for loop search
-            # the thing below actually works sorta
-        #    if((member.name==remindMessageData)|(member.nick==remindMessageData)):
-        #      tempAt = member.mention
-        #await message.channel.send("Reminder for:"+message.author.mention+ tempAt
-        #  + "about: ")
-      elif(message.content.startswith("rocketz")):
+      elif(message.content.startswith('!version')):
+        await message.channel.send("__AeroBot Version "+str(versionNum)+"__: Released 8/7/2021")
+
+      elif(message.content.startswith("!help")):
+        await helpCommand(message.channel) 
+
+      elif(message.content.startswith('!boop')):
+        await boopCommand(message)
+
+      elif(message.content.startswith('!b')):
+        await bCommand(message)
+
+      elif(message.content.startswith('!remind')):
+        if(validateRemind):
+          timeWait = await remindTimeParse(message.content)
+
+          #timeWait
+
+          await asyncio.sleep(timeWait)  # 30 seconds delay?
+          await job(message)
+        else:
+          message.channel.send("Invalid Remind Command: need two commas")
+
+      # a stupid little 'command' to test if the bot is still alive
+      elif( (message.content.startswith("rocketz")) | (message.content.startswith("planez")) | (message.content.startswith("dronez")) ):
         await message.channel.send("GO BRRRRRRRR")
-      #  rocketryID = 836398929402527764
-      #  role = message.guild.get_role(rocketryID)
-      #  await message.author.add_roles(role)
       
-async def reminderFunc(message, timeWait):
-      await message.channel.send("Waiting start")
-      time.sleep(timeWait)   
-      await message.channel.send("Done waiting")
 
+# events based on when a new person joins the server
+@client.event
+async def on_member_join(member):
+  await newMember(member)
+
+async def bCommand(message):
+  messageToSend = ""
+  messageLowerAnalyze = message.content
+  while( messageLowerAnalyze.find("b")!=-1):
+    bLocation = messageLowerAnalyze.find("b")
+    if(bLocation==0):
+        print("hi")
+        messageToSend= "🅱"
+    elif(messageLowerAnalyze[bLocation-1]==" "):
+        print("trust")
+        messageToSend= messageToSend+messageLowerAnalyze[0:bLocation]+" 🅱"
+        
+    print("DEBUG:"+messageLowerAnalyze)    
+    messageLowerAnalyze = messageLowerAnalyze[bLocation+1:]
+    
+  messageToSend =  messageToSend+messageLowerAnalyze[0:bLocation]
+
+  messageUpperAnalyze = message.content
+  while( messageUpperAnalyze.find("B")!=-1):
+    bLocation = messageUpperAnalyze.find("B")
+    if(bLocation==0):
+        print("hi")
+        messageToSend= "🅱"
+    elif(messageUpperAnalyze[bLocation-1]==" "):
+        print("trust")
+        messageToSend= messageToSend+messageUpperAnalyze[0:bLocation]+" 🅱"
+        
+    print("DEBUG:"+messageUpperAnalyze)    
+    messageUpperAnalyze = messageUpperAnalyze[bLocation+1:]
+    
+  messageToSend =  messageToSend+messageUpperAnalyze[0:bLocation]
+  await message.channel.send(messageToSend)
+
+
+
+#
+# helpCommand(message.channel)
+#
+# pritns out help info
+async def helpCommand(msgChannel):
+  await msgChannel.send("__Supported commands: (enter in the command for sytanx)__ \n"
+  + "!roll : rolls a dice of user's choice \n"
+  + "!poll : created a reaction poll, suports up to 10 options\n"
+  + "!remind : bot will send a delayed reminder message to user/s \n"
+  + "!version : gets my current version number\n"
+  + "!help : you dummy it should be obvious what this is >:(\n"
+  + "!boop : boops user/s, essentially just a cuter @ uwu"
+  + "'rocketz', 'dronez', 'planez': GO BRRRRRRRR ")
+
+#
+# boopCommand(meessage)
+#
+# boops a user, essentially a  cuter ping, uwu rawr X3
+async def boopCommand(message):
+  usersToBeBooped = message.mentions
+  boopMsg = ""
+  for x in range (len(usersToBeBooped)):
+    boopMsg = boopMsg + usersToBeBooped[x].mention +" "
+  if(boopMsg == ""):
+    await message.channel.send("ERROR: No users to boop!\nSyntax: !boop @user1 @user2 ...")
+  else:
+    if(len(usersToBeBooped)>1):
+      boopMsg = boopMsg + "have been booped by "+message.author.mention
+    else:
+      boopMsg = boopMsg + "has been booped by "+message.author.mention
+    await message.channel.send(boopMsg)
+    
+#
+# rollCommand(message)
+#
+# rolls a dice of the user choice 1d5 or 2d7
+async def rollCommand(message):
+  dice = message.content[6:]
+  dPos = dice.find("d")
+  if(dPos != -1):
+    numOfDice = int(dice[:dPos])
+    valueOfDice = int(dice[dPos+1:])
+    if((numOfDice > 0)):
+      if(valueOfDice>0):
+        diceRollMsg = ""
+        for x in range(numOfDice):
+          roll = random.randint(0,valueOfDice)
+          diceRollMsg = diceRollMsg + "Di #"+str(x+1)+", has value of: "+str(roll)+"\n"
+        await message.channel.send(diceRollMsg)
+      else:
+        await message.channel.send("Invalid dice command: Value of dice must be greater than zero!")
+        
+    else:
+      await message.channel.send("Invalid dice command: Number of dice must be greater than zero!")
+  else:
+    await message.channel.send("Invalid dice command")
+
+#
+# botRecieveDM(message)
+#
+# helper function handler for if a user dm's the bot, gets forwarded to who ever the Bot Overlord is, be sure
+# to replace the user ID as needed
+async def botRecieveDM(message):
+  temp = client.get_user(botOverLordID)
+  await temp.send("__**DM from: "+message.author.name + "#" + message.author.discriminator+"**__\n"+message.content)
+
+async def validateRemind(messageIn):
+  firstComma = messageIn.find(",")
+  if((firstComma)!=-1):
+    messageCut = messageIn[firstComma+1:]
+    secondComma = messageIn.find(",")
+    if(secondComma!=-1):
+      return True
+  else:
+    return False
+
+
+#
+# remindTimeParse(messageIn)
+#
+# pulls out the needed info for the remind command
+async def remindTimeParse(messageIn):
+  print(messageIn)
+  if( messageIn.find(",")!=-1 ):
+    messageMinusAts = messageIn[messageIn.find(",")+1:]
+    hoursColon = messageMinusAts.find(":")
+    hours = messageMinusAts[0:hoursColon]
+    
+    messageMinusAts = messageMinusAts[hoursColon+1:]
+    minColon = messageMinusAts.find(":")
+    min = messageMinusAts[:minColon]
+    messageMinusAts = messageMinusAts[minColon+1:]
+
+    seconds = messageMinusAts[0:messageMinusAts.find(",")]
+
+
+    if(DEBUG):
+      print("DEBUG: Hours: "+hours+" Min: "+min+" Sec: "+seconds)
+
+    return (int(hours)*3600)+(int(min)*60)+(int(seconds))
+
+  else:
+    return -999
+
+
+#
+# bootSequence()
+#
+# boot sequence for the bot, sets up the role reactions message, and completes the roleInfo data structure
+# also sets the presence of the bot
+async def bootSequence():
+  global globalRoleMsg
+  global roleInfo
+  global guildID
+  print('We have logged in as {0.user}'.format(client))
+  game = discord.Game("with GLaDOS")
+  await client.change_presence(status=discord.Status.online, activity=game)
+  #we have restarted the bot so we want to reset the reaction roles message
+  AIAAGuild = client.get_guild(guildID)
+  #newPersonRole = AIAAGuild.get_role(841828431956279296)
+  for x in range (len(roleInfo)):
+    roleInfo[x]['roleAccess'] = AIAAGuild.get_role(roleInfo[x]['ID'])
+
+  # make code more general instead of channel id
+  rolesChannel = AIAAGuild.get_channel(836398238579032084)
+  await rolesChannel.purge()
+  globalRoleMsg = await rolesChannel.send("**__Welcome to the AIAA Server__** \n"
+  + "To get roles add the reaction below with the corresponding AIAA branch you would want to join. \n"
+  + "You can pick, one, all or undecided if you just wanna take a look around the server! \n"
+  +"If you need a role removed DM one of the board members. \n \n"
+  + "**__AIAA Roles__**\n"
+  + ":airplane: Design Build Fly (DBF)\n"
+  +":rocket: Rocketry \n"
+  +":dash: Quadcopters \n"
+  +":question: Undecided \n\n"
+  +"**__Major__**\n"
+  +":gear: Mechancial Engineering \n"
+  +":keyboard: Computer Science \n"
+  +":bulb: Electrical Engineering \n"
+  +":alembic: Chemcial Engineering \n"
+  +":astronaut: Other \n \n"
+  +"**__Offtopic Roles__**\n"
+  +":books: School\n"
+  +":video_game: Gaming")
+
+  for x in range(1,len(roleInfo)):
+    await globalRoleMsg.add_reaction(emoji=roleInfo[x]['emoji'])
+
+#
+# userAddRoles(reaction, user)
+#
+# Helper function that removes the "New Member" role if the user still has it, and pulls  the corresponing from
+# the dictionary that the user selected to get
+async def userAddRoles(reaction, user):
+  global roleInfo
+  if(user!=client.user):
+    if((next((item for item in roleInfo if item['emoji'] == reaction.emoji), None))!=None):
+      if roleInfo[0]['roleAccess'] in user.roles:
+        await user.remove_roles(roleInfo[0]['roleAccess'])
+          
+      pos = next(i for i, item in enumerate(roleInfo) if item['emoji'] == reaction.emoji)
+      await user.add_roles(roleInfo[pos]['roleAccess'])
+
+async def remindMessageParse(messageIn):
+  colFind = messageIn.find(",")
+  messageIn = messageIn[colFind+1:]
+  colFind = messageIn.find(",")
+  messageIn = messageIn[colFind+1:]
+  return messageIn
+
+
+#
+# job(message)
+#
+# Helper function that is called for the remind me command, still in BETA
+async def job(message):
+  usersToAt = ""
+  usersToRemind = message.mentions
+  for x in range(len(usersToRemind)):
+    usersToAt = usersToAt + " " + usersToRemind[x].mention
+  remindMessage = await remindMessageParse(message.content)
+  await message.channel.send("Reminder for "+ usersToAt+":"+remindMessage)
+
+#
+# pollCommand(message)
+#
+# creates a poll with up to 10 options, uses pollCommandProcess to parse out/ get the sting info set up properly
+async def pollCommand(message):
+  cutMsg = message.content[6:]
+  pollReturn = pollCommandProcess(cutMsg)
+  botPollMsg = await message.channel.send(pollReturn[1])
+  if(pollReturn[0]):
+    reactionsToAdd = pollReturn[2]
+    for x in range(len(reactionsToAdd)):
+      await botPollMsg.add_reaction(emoji=reactionsToAdd[x])
+    await message.delete()
+
+#
+# pollCommandProcess(msg)
+#
+# takes in a comma seperated string and pulls out the info, returns a how to use of the format is not correct
 def pollCommandProcess(msg):
   reactions = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"]
   reactionsText = [":one:",":two:",":three:",":four:",":five:",":six:",":seven:",":eight:",":nine:"]
@@ -209,11 +424,13 @@ def pollCommandProcess(msg):
     reactionsToAdd.append(reactions[x])
   return [validMsg,messageToSend,reactionsToAdd]
 
-
-@client.event
-async def on_member_join(member):
-  newMemberID = 841828431956279296
-  role = member.guild.get_role(newMemberID)
+#
+# newMember(member)
+#
+# helper function that DM's the new user and gives them the "New Member Role"
+async def newMember(member):
+  global newMemberRoleID
+  role = member.guild.get_role(newMemberRoleID)
   await member.add_roles(role)
   await member.send('This is an automated message. Do not respond to this. \n \n'
       +'__**Welcome to the UIC AIAA Discord server!**__ \n '
