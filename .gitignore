@@ -1,2 +1,2 @@
-launch.json
+git rm --cached .vscode/launch.json
 .vscode/launch.json
