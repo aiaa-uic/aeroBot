@@ -18,6 +18,7 @@ import os
 import asyncio
 import random
 
+#from dotenv import load_dotenv
 from discord import message
 
 # pre-release version that will be shown to the board
@@ -58,7 +59,7 @@ roleInfo = [
     'roleAccess':None
   },
   {
-    'name': 'Quadcopter',
+    'name': 'Drone',
     'emoji': "💨",
     'ID':836398936104894474,
     'roleAccess':None
@@ -132,7 +133,7 @@ async def on_message(message):
         await bCommand(message)
 
       elif(message.content.startswith('!remind')):
-        if(validateRemind):
+        if(validateRemind(message.content)):
           timeWait = await remindTimeParse(message.content)
 
           #timeWait
@@ -140,7 +141,7 @@ async def on_message(message):
           await asyncio.sleep(timeWait)  # 30 seconds delay?
           await job(message)
         else:
-          message.channel.send("Invalid Remind Command: need two commas")
+          await message.channel.send("Invalid Remind Command: need two commas")
 
       # a stupid little 'command' to test if the bot is still alive
       elif( (message.content.startswith("rocketz")) | (message.content.startswith("planez")) | (message.content.startswith("dronez")) ):
@@ -169,7 +170,7 @@ async def bCommand(message):
     
   messageToSend =  messageToSend+messageLowerAnalyze[0:bLocation]
 
-  messageUpperAnalyze = message.content
+  messageUpperAnalyze = messageToSend
   while( messageUpperAnalyze.find("B")!=-1):
     bLocation = messageUpperAnalyze.find("B")
     if(bLocation==0):
@@ -198,7 +199,7 @@ async def helpCommand(msgChannel):
   + "!remind : bot will send a delayed reminder message to user/s \n"
   + "!version : gets my current version number\n"
   + "!help : you dummy it should be obvious what this is >:(\n"
-  + "!boop : boops user/s, essentially just a cuter @ uwu"
+  + "!boop : boops user/s, essentially just a cuter @ uwu \n"
   + "'rocketz', 'dronez', 'planez': GO BRRRRRRRR ")
 
 #
@@ -211,7 +212,7 @@ async def boopCommand(message):
   for x in range (len(usersToBeBooped)):
     boopMsg = boopMsg + usersToBeBooped[x].mention +" "
   if(boopMsg == ""):
-    await message.channel.send("ERROR: No users to boop!\nSyntax: !boop @user1 @user2 ...")
+    await message.channel.send("Syntax: !boop @user1 @user2 ...")
   else:
     if(len(usersToBeBooped)>1):
       boopMsg = boopMsg + "have been booped by "+message.author.mention
@@ -253,14 +254,16 @@ async def botRecieveDM(message):
   temp = client.get_user(botOverLordID)
   await temp.send("__**DM from: "+message.author.name + "#" + message.author.discriminator+"**__\n"+message.content)
 
-async def validateRemind(messageIn):
+def validateRemind(messageIn):
   firstComma = messageIn.find(",")
+  print(firstComma)
   if((firstComma)!=-1):
     messageCut = messageIn[firstComma+1:]
     secondComma = messageIn.find(",")
     if(secondComma!=-1):
       return True
   else:
+    print("whats up")
     return False
 
 
@@ -394,9 +397,9 @@ def pollCommandProcess(msg):
 
   # set up default returns
   validMsg = False
-  messageToSend = ("//poll command syntax: \n" 
-    +"//poll POLL TITLE, OPTION 1, OPTION 2, OPTION 3, ... , OPTION 9 \n"
-    + "Currently the //poll command only supports 9 options. And you need atleast 1 option to be a valid poll.")
+  messageToSend = ("!poll command syntax: \n" 
+    +"!poll POLL TITLE, OPTION 1, OPTION 2, OPTION 3, ... , OPTION 9 \n"
+    + "Currently the !poll command only supports 9 options. And you need atleast 1 option to be a valid poll.")
   reactionsToAdd = []
   pollArray = []
   if(msg.find(",")!=-1):
@@ -430,8 +433,9 @@ def pollCommandProcess(msg):
 # helper function that DM's the new user and gives them the "New Member Role"
 async def newMember(member):
   global newMemberRoleID
-  role = member.guild.get_role(newMemberRoleID)
-  await member.add_roles(role)
+  #role = member.guild.get_role(newMemberRoleID)
+  #await user.add_roles(roleInfo[pos]['roleAccess'])
+  await member.add_roles(roleInfo[0]['roleAccess'])
   await member.send('This is an automated message. Do not respond to this. \n \n'
       +'__**Welcome to the UIC AIAA Discord server!**__ \n '
       + 'To get started please introduce yourself in #introductions and change your nickname to your real name. Next react to the message found in #roles in order to gain further access to the server, and team specific channels. If you would like to contact a specific team manager for more info they are listed below.\n \n' 
@@ -439,6 +443,5 @@ async def newMember(member):
       + '**:rocket:Rocket Project Manager:** Cade Vacaroni, whjads \n'
       + '**:airplane:DBF Project Manager:** Stevenson Durning, osaijdoj \n' 
       + '**:dash:Drone Project Manager:** Alex Rodriguez')
-
 
 client.run(os.environ['TOKEN']);
